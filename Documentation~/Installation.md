@@ -97,6 +97,7 @@ First, get **MeshSync DCC Plugins** package in a Unity project.
   
 1. Open `Packages/MeshSync DCC Plugins/Editor/Plugins` folder using a file explorer 
    and uncompress the appropriate zip file for Blender.
+   For Blender 5.0 or 5.1 on Windows, select `blender-5.0.0.zip` or `blender-5.1.1.zip`; MeshSync 0.17.3 does not auto-detect these versions yet.
 1. Start Blender
 1. Go to Edit &rarr; User Preferences
 1. Click "Install" at the top right of the window, and select the appropriate **blender-x.xx.zip** file.

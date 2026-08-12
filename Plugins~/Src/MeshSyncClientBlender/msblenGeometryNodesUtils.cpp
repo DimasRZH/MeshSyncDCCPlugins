@@ -12,31 +12,29 @@
 
 
 using namespace std;
-using namespace mu;
-
 namespace blender {
 
 #if BLENDER_VERSION >= 300
     GeometryNodesUtils::GeometryNodesUtils()
     {
-        auto rotation = rotate_x(-90 * DegToRad);
-        auto rotation180 = rotate_z(180 * DegToRad);
-        auto scale_z = float3::one();
+        auto rotation = mu::rotate_x(-90 * mu::DegToRad);
+        auto rotation180 = mu::rotate_z(180 * mu::DegToRad);
+        auto scale_z = mu::float3::one();
         scale_z.z = -1;
 
-        auto scale_x = float3::one();
+        auto scale_x = mu::float3::one();
         scale_x.x = -1;
 
         m_blender_to_unity_world =
-            to_mat4x4(rotation) *
-            scale44(scale_x);
+            mu::to_mat4x4(rotation) *
+            mu::scale44(scale_x);
 
         m_blender_to_unity_local = 
-            to_mat4x4(rotation) *
-            to_mat4x4(rotation180) *
-            scale44(scale_z);
+            mu::to_mat4x4(rotation) *
+            mu::to_mat4x4(rotation180) *
+            mu::scale44(scale_z);
         
-        m_camera_light_correction = to_mat4x4(rotate_x(90 * DegToRad));
+        m_camera_light_correction = mu::to_mat4x4(mu::rotate_x(90 * mu::DegToRad));
     }
 
     /// <summary>
@@ -44,9 +42,9 @@ namespace blender {
     /// </summary>
     /// <param name="blenderMatrix"></param>
     /// <returns></returns>
-    float4x4 GeometryNodesUtils::blenderToUnityWorldMatrix(ms::TransformPtr transform, const float4x4& blenderMatrix) const
+    mu::float4x4 GeometryNodesUtils::blenderToUnityWorldMatrix(ms::TransformPtr transform, const mu::float4x4& blenderMatrix) const
     {
-        float4x4 result = blenderMatrix;
+        mu::float4x4 result = blenderMatrix;
 
         auto type = transform->getType();
         auto is_camera = type == ms::Entity::Type::Camera;
@@ -93,7 +91,12 @@ namespace blender {
             return string(data->name) + string(obj->id.name);
         };
 
+#if BLENDER_VERSION >= 501
+        for (Object& object : objects) {
+            Object* obj = &object;
+#else
         LISTBASE_FOREACH(Object*, obj, &objects) {
+#endif
 
             if (obj->data == nullptr)
                 continue;
@@ -103,15 +106,16 @@ namespace blender {
             file_objects.insert(path);
         }
 
-        each_instance([&](Object* obj, Object* parent, float4x4 matrix)
+        each_instance([&](Object* obj, Object* parent, mu::float4x4 matrix)
             {
                 auto id = (ID*)obj->data;
+                const auto session_id = msblenUtils::get_session_id(id);
 
                 //Some objects, i.e. lights, do not use a session uuid.
-                bool useName = id->session_uuid == 0;
+                bool useName = session_id == 0;
 
                 // An object might be sharing data with other objects, need to use the object name in keys
-                auto& rec = useName? records_by_name[std::string(id->name + 2) + obj->id.name] : records_by_session_id[std::to_string(id->session_uuid) + obj->id.name];
+                auto& rec = useName? records_by_name[std::string(id->name + 2) + obj->id.name] : records_by_session_id[std::to_string(session_id) + obj->id.name];
 
                 if (!rec.handled_object)
                 {
@@ -122,7 +126,7 @@ namespace blender {
                     
                     rec.from_file = file_objects.find(get_path(obj)) != file_objects.end();
 
-                    rec.id = rec.name +"_" + std::to_string(id->session_uuid);
+                    rec.id = rec.name +"_" + std::to_string(session_id);
                     obj_handler(rec);
                 }
                 
@@ -149,7 +153,7 @@ namespace blender {
 
     }
 
-    void GeometryNodesUtils::each_instance(std::function<void(Object*, Object*, float4x4)> handler)
+    void GeometryNodesUtils::each_instance(std::function<void(Object*, Object*, mu::float4x4)> handler)
     {
         auto blender_ctx = BlenderPyContext::get();
         auto depsgraph_ctx = blender_ctx.evaluated_depsgraph_get();
@@ -186,7 +190,7 @@ namespace blender {
                 continue;
             }
 
-            auto world_matrix = float4x4();
+            auto world_matrix = mu::float4x4();
             instance.world_matrix(&world_matrix);
 
             auto parent = instance.parent();

@@ -11,19 +11,23 @@
 
 namespace blender {
 
-void BlenderUtility::ApplyBMeshUVToMesh(const blender::BMesh* bMesh, const size_t numIndices, ms::Mesh* dest) {
+void BlenderUtility::ApplyBMeshUVToMesh(const blender::BlenderMesh* bMesh, const size_t numIndices, ms::Mesh* dest) {
 
     const uint32_t numUVs = std::min(bMesh->GetNumUVs(), ms::MeshSyncConstants::MAX_UV);
 
     for (uint32_t uvIndex=0;uvIndex<numUVs;++uvIndex) {
-        MLoopUV* loopUV = bMesh->GetUV(uvIndex);
+        auto* loopUV = bMesh->GetUV(uvIndex);
         if (nullptr == loopUV)
             continue;
 
         SharedVector<mu::float2>& curUV = dest->m_uv[uvIndex];
         curUV.resize_discard(numIndices);
         for (size_t ii = 0; ii < numIndices; ++ii) {
+#if BLENDER_VERSION >= 500
+            curUV[ii] = { loopUV->x, loopUV->y };
+#else
             curUV[ii] = (mu::float2&)loopUV->uv;
+#endif
             ++loopUV;
         }
     }

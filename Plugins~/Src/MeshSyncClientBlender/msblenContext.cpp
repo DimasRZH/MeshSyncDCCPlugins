@@ -72,14 +72,13 @@ void msblenContext::Destroy() {
         return;
     }
 
-    m_texture_manager.clear();
-    m_material_manager.clear();
+    // Sender callbacks read this context. Finish regular sends here; m_sender is
+    // declared last so its destructor aborts and joins live edit before other members.
+    wait();
 
-    m_entities_state->clear();
-    m_instances_state->clear();
-
-    delete s_instance;
+    auto* instance = s_instance;
     s_instance = nullptr;
+    delete instance;
 }
 
 
@@ -249,7 +248,11 @@ void msblenContext::extractLightData(const Object *src,
 
     color = (mu::float4&)data->r;
     intensity = data->energy * ENERGY_TO_INTENSITY;
+#if BLENDER_VERSION >= 500
+    range = data->att_dist;
+#else
     range = data->dist;
+#endif
 
     switch (data->type) {
     case LA_SUN:
@@ -647,7 +650,7 @@ void msblenContext::importMesh(ms::Mesh* mesh) {
 
     int num_vertices = mesh->points.size();
 
-    bl::BMesh bmesh(data);
+    bl::BlenderMesh bmesh(data);
 
     bmesh.clear_geometry();
     bmesh.add_vertices(num_vertices);
@@ -656,11 +659,19 @@ void msblenContext::importMesh(ms::Mesh* mesh) {
 
     auto bmeshVerts = bmesh.vertices();
     auto bmeshIndices = bmesh.indices();
+#if BLENDER_VERSION >= 500
+    auto bmeshFaceOffsets = bmesh.face_offsets();
+#else
     auto bmeshPolygons = bmesh.polygons();
+#endif
   
     // vertices
     for (size_t vi = 0; vi < num_vertices; ++vi) {
+#if BLENDER_VERSION >= 500
+        bmeshVerts[vi] = mesh->points[vi];
+#else
         copyFloatVector(bmeshVerts[vi].co, mesh->points[vi])
+#endif
     }
 
     // faces
@@ -669,21 +680,30 @@ void msblenContext::importMesh(ms::Mesh* mesh) {
         // int count = mesh->counts[pi];
         // always 3 for triangles from unity:
         const int count = 3;
+#if BLENDER_VERSION >= 500
+        bmeshFaceOffsets[pi] = ii;
+        bmeshFaceOffsets[pi + 1] = ii + count;
+#else
         bmeshPolygons[pi].loopstart = ii;
         bmeshPolygons[pi].totloop = count;
+#endif
 
         const int material_index = mesh->material_ids[pi];
         if (material_index != ms::InvalidID) {
             auto it = rev_mid_table.find(material_index);
             if (it != rev_mid_table.end()) {
-#if BLENDER_VERSION >= 304
+#if BLENDER_VERSION >= 500
+                bmesh.set_material_index((int)pi, it->second);
+#elif BLENDER_VERSION >= 304
                 bmeshPolygons[pi].mat_nr_legacy = it->second;
 #else
                 bmeshPolygons[pi].mat_nr = it->second;
 #endif
             }
             else {
-#if BLENDER_VERSION >= 304
+#if BLENDER_VERSION >= 500
+                bmesh.set_material_index((int)pi, 0);
+#elif BLENDER_VERSION >= 304
                 bmeshPolygons[pi].mat_nr_legacy = 0;
 #else
                 bmeshPolygons[pi].mat_nr = 0;
@@ -692,9 +712,15 @@ void msblenContext::importMesh(ms::Mesh* mesh) {
         }
 
         // Reverse triangle back because it was reversed in unity during refine step:
+#if BLENDER_VERSION >= 500
+        bmeshIndices[bmeshFaceOffsets[pi] + 0] = mesh->indices[ii++];
+        bmeshIndices[bmeshFaceOffsets[pi] + 2] = mesh->indices[ii++];
+        bmeshIndices[bmeshFaceOffsets[pi] + 1] = mesh->indices[ii++];
+#else
         bmeshIndices[bmeshPolygons[pi].loopstart + 0].v = mesh->indices[ii++];
         bmeshIndices[bmeshPolygons[pi].loopstart + 2].v = mesh->indices[ii++];
         bmeshIndices[bmeshPolygons[pi].loopstart + 1].v = mesh->indices[ii++];
+#endif
     }
 
     // Calculate edges, normals, loops, etc:
@@ -767,7 +793,7 @@ ms::MeshPtr msblenContext::exportMesh(msblenContextState& state, msblenContextPa
         if (data && settings.sync_normals && settings.calc_per_index_normals) {
             // calc_normals_split() seems can't be multi-threaded. it will cause unpredictable crash...
             // todo: calculate normals by myself to be multi-threaded
-            bl::BMesh(data).calc_normals_split();
+            bl::BlenderMesh(data).calc_normals_split();
         }
     }
 
@@ -790,7 +816,7 @@ void msblenContext::doExtractMeshData(msblenContextState& state, BlenderSyncSett
 {
     if (settings.sync_meshes) {
         bl::BObject bobj(obj);
-        bl::BMesh bmesh(data);
+        bl::BlenderMesh bmesh(data);
         const bool is_editing = get_edit_mesh(bmesh.ptr()) != nullptr;
 
         // on edit mode, editing is applied to EditMesh and base Mesh is intact. so get data from EditMesh on edit mode.
@@ -859,15 +885,25 @@ void msblenContext::doExtractBlendshapeWeights(msblenContextState& state, Blende
 void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderSyncSettings& settings, ms::Mesh& dst, const Object *obj, Mesh *data)
 {
     bl::BObject bobj(obj);
-    bl::BMesh bmesh(data);
+    bl::BlenderMesh bmesh(data);
     struct Mesh& mesh = *data;
 
+#if BLENDER_VERSION >= 500
+    blender::barray_range<int> indices = bmesh.indices();
+    blender::barray_range<int> faceOffsets = bmesh.face_offsets();
+    blender::barray_range<mu::float3> vertices = bmesh.vertices();
+#else
     blender::barray_range<struct MLoop> indices = bmesh.indices();
     blender::barray_range<struct MPoly> polygons = bmesh.polygons();
     blender::barray_range<struct MVert> vertices = bmesh.vertices();
+#endif
 
     const size_t num_indices = indices.size();
+#if BLENDER_VERSION >= 500
+    const size_t num_polygons = faceOffsets.empty() ? 0 : faceOffsets.size() - 1;
+#else
     const size_t num_polygons = polygons.size();
+#endif
     size_t num_vertices = vertices.size();
 
     int materialCount = std::max(bobj.m_ptr->totcol, (int)mesh.totcol);
@@ -901,7 +937,11 @@ void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderS
     // vertices
     dst.points.resize_discard(num_vertices);
     for (size_t vi = 0; vi < num_vertices; ++vi) {
+#if BLENDER_VERSION >= 500
+        dst.points[vi] = vertices[vi];
+#else
         dst.points[vi] = (mu::float3&)vertices[vi].co;
+#endif
     }
 
 #if BLENDER_VERSION >= 304
@@ -915,13 +955,22 @@ void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderS
     {
         int ii = 0;
         for (size_t pi = 0; pi < num_polygons; ++pi) {
+#if BLENDER_VERSION >= 500
+            const int loopStart = faceOffsets[pi];
+            const int count = faceOffsets[pi + 1] - loopStart;
+#else
             struct MPoly& polygon = polygons[pi];
+#endif
 
 #if BLENDER_VERSION >= 304
             int material_index = 0;
+#if BLENDER_VERSION >= 501
+            material_index = bmesh.material_index(static_cast<int>(pi));
+#else
             if (materialIndices.size() > pi) {
                 material_index = materialIndices[pi];
             }
+#endif
 #else
             int material_index = polygon.mat_nr;
 #endif
@@ -930,16 +979,25 @@ void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderS
             // Check for it so we don't crash when this happens:
             material_index = max(0, min(material_index, materialCount - 1));
 
+#if BLENDER_VERSION < 500
             const int count = polygon.totloop;
+#endif
             dst.counts[pi] = count;
 
             dst.material_ids[pi] = mid_table[material_index];
             dst.indices.resize(dst.indices.size() + count);
 
+#if BLENDER_VERSION >= 500
+            int* idx = &indices[loopStart];
+            for (int li = 0; li < count; ++li) {
+                dst.indices[ii++] = idx[li];
+            }
+#else
             struct MLoop* idx = &indices[polygon.loopstart];
             for (int li = 0; li < count; ++li) {
                 dst.indices[ii++] = idx[li].v;
             }
+#endif
         }
     }
 
@@ -953,12 +1011,18 @@ void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderS
         }
 #endif
         // per-index
+#if BLENDER_VERSION >= 500
+        dst.normals.resize_discard(num_indices);
+        for (size_t ii = 0; ii < num_indices; ++ii)
+            dst.normals[ii] = ms::ceilToDecimals(bmesh.normal((int)ii));
+#else
         blender::barray_range<mu::tvec3<float>> normals = bmesh.normals();
         if (!normals.empty()) {
             dst.normals.resize_discard(num_indices);
             for (size_t ii = 0; ii < num_indices; ++ii)
                 dst.normals[ii] = ms::ceilToDecimals(normals[ii]);
         }
+#endif
     }
 
 
@@ -991,6 +1055,9 @@ void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderS
             const ArmatureModifierData* arm_mod = (const ArmatureModifierData*)FindModifier(
                 obj, eModifierType_Armature);
             if (arm_mod) {
+#if BLENDER_VERSION >= 500
+                auto deformVertices = bmesh.deform_vertices();
+#endif
                 // request bake TRS
                 dst.refine_settings.flags.Set(ms::MESH_REFINE_FLAG_LOCAL2WORLD, true);
                 dst.refine_settings.local2world = mu::transform(dst.position, invert(dst.rotation), dst.scale);
@@ -1009,8 +1076,15 @@ void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderS
                             b->weights.resize_zeroclear(num_vertices);
 
                             for (int vi = 0; vi < num_vertices; ++vi) {
+#if BLENDER_VERSION >= 500
+                                if ((size_t)vi >= deformVertices.size())
+                                    continue;
+                                int num_weights = deformVertices[vi].totweight;
+                                struct MDeformVert& dvert = deformVertices[vi];
+#else
                                 int num_weights = mesh.dvert[vi].totweight;
                                 struct MDeformVert& dvert = mesh.dvert[vi];
+#endif
                                 for (int wi = 0; wi < num_weights; ++wi) {
                                     if (dvert.dw[wi].def_nr == group_index) {
                                         b->weights[vi] = dvert.dw[wi].weight;
@@ -1108,12 +1182,12 @@ void msblenContext::doExtractNonEditMeshData(msblenContextState& state, BlenderS
 void msblenContext::doExtractEditMeshData(msblenContextState& state, BlenderSyncSettings& settings, ms::Mesh& dst, const Object *obj, Mesh *data)
 {
     bl::BObject bobj(obj);
-    bl::BMesh bmesh(data);
+    bl::BlenderMesh bmesh(data);
     bl::BEditMesh emesh(get_edit_mesh(bmesh.ptr()));
     struct Mesh& mesh = *data;
 
     blender::barray_range<struct BMFace*> polygons = emesh.polygons();
-    blender::barray_range<struct BMLoop*[3]> triangles = emesh.triangles();
+    auto triangles = emesh.triangles();
     blender::barray_range<struct BMVert*> vertices = emesh.vertices();
 
     const size_t num_triangles = triangles.size();
@@ -1140,7 +1214,7 @@ void msblenContext::doExtractEditMeshData(msblenContextState& state, BlenderSync
 
         size_t ii = 0;
         for (size_t ti = 0; ti < num_triangles; ++ti) {
-            struct BMLoop*(& triangle)[3] = triangles[ti];
+            auto& triangle = triangles[ti];
 
 
             int material_index = 0;
@@ -1167,7 +1241,7 @@ void msblenContext::doExtractEditMeshData(msblenContextState& state, BlenderSync
         dst.normals.resize_discard(num_indices);
         size_t ii = 0;
         for (size_t ti = 0; ti < num_triangles; ++ti) {
-            struct BMLoop*(& triangle)[3] = triangles[ti];
+            auto& triangle = triangles[ti];
             const int polygon_index = triangle[0]->f->head.index;
 
             auto polygon = polygons[polygon_index];
@@ -1654,6 +1728,9 @@ bool msblenContext::sendAnimations(MeshSyncClient::ObjectScope scope)
     // advance frame and record animations
     {
         const int frame_current = scene.GetCurrentFrame();
+#if BLENDER_VERSION >= 500
+        const float frame_subframe = scene.GetCurrentSubframe();
+#endif
         const int frame_start = scene.frame_start();
         const int frame_end = scene.frame_end();
         const int interval = frame_step;
@@ -1676,7 +1753,11 @@ bool msblenContext::sendAnimations(MeshSyncClient::ObjectScope scope)
                 f = std::min(f + interval, frame_end);
         }
         m_anim_records.clear();
+#if BLENDER_VERSION >= 500
+        scene.SetCurrentFrame(frame_current, depsGraph, frame_subframe);
+#else
         scene.SetCurrentFrame(frame_current, depsGraph);
+#endif
     }
 
     m_ignore_events = false;
@@ -1717,6 +1798,9 @@ bool msblenContext::ExportCache(const std::string& path, const BlenderCacheSetti
     mu::ScopedTimer timer;
 
     const int prevFrame = scene.GetCurrentFrame();
+#if BLENDER_VERSION >= 500
+    const float prevSubframe = scene.GetCurrentSubframe();
+#endif
     int frameStart = 0, frameEnd = 0;
     switch(cache_settings.frame_range){
         case MeshSyncClient::FrameRange::Current:{
@@ -1759,7 +1843,11 @@ bool msblenContext::ExportCache(const std::string& path, const BlenderCacheSetti
         DoExportSceneCache(nodes);
         ++sceneIndex;
     }
+#if BLENDER_VERSION >= 500
+    scene.SetCurrentFrame(prevFrame, depsGraph, prevSubframe);
+#else
     scene.SetCurrentFrame(prevFrame, depsGraph);
+#endif
 
     m_asyncTasksController.Wait();
     logInfo("MeshSync: Finished writing scene cache to %s (%f) ms", destPath.c_str(), timer.elapsed());

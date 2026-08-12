@@ -1,6 +1,11 @@
 #include "msblenMaterialsExportHelper.h"
 
+#if BLENDER_VERSION >= 500
+#include <BKE_node.hh>
+#include <BKE_node_legacy_types.hh>
+#else
 #include <BKE_node.h>
+#endif
 #include <BLI_utildefines.h>
 
 #include "msblenUtils.h"
@@ -8,6 +13,12 @@
 #include "MeshSync/Utility/msMaterialExt.h"
 
 namespace blender {
+#if BLENDER_VERSION >= 500
+static int node_type(const bNode* node) { return node->type_legacy; }
+#else
+static int node_type(const bNode* node) { return node->type; }
+#endif
+
 // Blender uses hardcoded string identifiers to figure out what the sockets do:
 const auto baseColorIdentifier = "Base Color";
 const auto colorIdentifier = "Color";
@@ -32,7 +43,7 @@ const auto bakedAOImageName = "BAKED_AO";
 
 // Moves upstream to find input nodes, passing through reroutes.
 bNode* traverseReroutes(bNode* node, const Material* mat) {
-	if (!node || node->type != NODE_REROUTE) {
+	if (!node || node_type(node) != NODE_REROUTE) {
 		return node;
 	}
 
@@ -69,12 +80,12 @@ bNode* getNodeConnectedToSocket(bNodeSocket* socket) {
 bNode* handleBSDFTypes(const Material* mat, bNode* bsdf) {
 	// Unsupported BSDFs:
 	if (!bsdf ||
-		bsdf->type == SH_NODE_HOLDOUT) {
+		node_type(bsdf) == SH_NODE_HOLDOUT) {
 		return nullptr;
 	}
 
     // If it's a node group, check if there is a bsdf upstream and pass through instead:
-    if (bsdf->type == NODE_GROUP) {
+    if (node_type(bsdf) == NODE_GROUP) {
 		for (auto inputSocket : list_range((bNodeSocket*)bsdf->inputs.first)) {
 			bNode* connectedBSDF = handleBSDFTypes(mat, traverseReroutes(getNodeConnectedToSocket(inputSocket), mat));
 			if (connectedBSDF)
@@ -85,8 +96,8 @@ bNode* handleBSDFTypes(const Material* mat, bNode* bsdf) {
     }
 
 	// BSDFs that we pass through:
-    if (bsdf->type != SH_NODE_MIX_SHADER &&
-		bsdf->type != SH_NODE_ADD_SHADER)
+    if (node_type(bsdf) != SH_NODE_MIX_SHADER &&
+		node_type(bsdf) != SH_NODE_ADD_SHADER)
 		return bsdf;
 
 	// Get all connected inputs:
@@ -103,7 +114,7 @@ bNode* handleBSDFTypes(const Material* mat, bNode* bsdf) {
 
 	if (connectedValues.size() > 0) {
 		// For mix shaders, prefer output based on fraction if it's connected:
-		if (bsdf->type == SH_NODE_MIX_SHADER)
+		if (node_type(bsdf) == SH_NODE_MIX_SHADER)
 		{
 			auto factorSocket = getInputSocket(bsdf, "Fac");
 			if (factorSocket)
@@ -129,7 +140,7 @@ bool getBSDFAndOutput(const Material* mat, bNode*& bsdf, bNode*& output) {
 	auto tree = mat->nodetree;
 	for (auto link : list_range((bNodeLink*)tree->links.first)) {
 		if (link->tonode &&
-			link->tonode->type == SH_NODE_OUTPUT_MATERIAL &&
+			node_type(link->tonode) == SH_NODE_OUTPUT_MATERIAL &&
 			STREQ(link->tosock->identifier, surfaceIdentifier)) {
 			bsdf = traverseReroutes(link->fromnode, mat);
 
@@ -388,7 +399,7 @@ void msblenMaterialsExportHelper::setValueFromSocket(const Material* mat,
 		setTextureHandler = nullptr;
 	}
 
-    switch (sourceNode->type) {
+    switch (node_type(sourceNode)) {
 	case SH_NODE_TEX_IMAGE:
 	{
 		handleImageNode(textureType, resetIfInputIsTexture, setColorHandler, setTextureHandler, sourceNode);
@@ -422,7 +433,7 @@ void msblenMaterialsExportHelper::setValueFromSocket(const Material* mat,
 
 void msblenMaterialsExportHelper::setShaderFromBSDF(ms::StandardMaterial& stdmat, bNode* bsdfNode)
 {
-	switch (bsdfNode->type)
+	switch (node_type(bsdfNode))
 	{
 	case SH_NODE_BSDF_GLASS:
 		stdmat.setShader("Glass");
@@ -553,7 +564,7 @@ void msblenMaterialsExportHelper::setAmbientOcclusion(const Material* mat, ms::S
 	// Checks if there is an image node called 'BAKED_AO' and if there is, it sends its image as AO:
 	auto tree = mat->nodetree;
 	for (auto node : list_range((bNode*)tree->nodes.first)) {
-		if(node->type == SH_NODE_TEX_IMAGE)
+		if(node_type(node) == SH_NODE_TEX_IMAGE)
 		{
 		    if(STREQ(node->name, bakedAOImageName))
 		    {

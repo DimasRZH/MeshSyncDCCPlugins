@@ -7,23 +7,35 @@
 namespace blender {
 
 template<typename T> inline T rna_data(py::object p) { 
+#if BLENDER_VERSION >= 501
+    return reinterpret_cast<T>(p.attr("id_data").attr("as_pointer")().cast<uintptr_t>());
+#elif BLENDER_VERSION >= 500
+    return reinterpret_cast<T>(reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr->owner_id);
+#else
     return reinterpret_cast<T>(PointerRNA_OWNER_ID( reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr) ); 
+#endif
 }
 template<typename T> inline void rna_data(py::object p, T& v) { 
+#if BLENDER_VERSION >= 501
+    v = reinterpret_cast<T>(p.attr("id_data").attr("as_pointer")().cast<uintptr_t>());
+#elif BLENDER_VERSION >= 500
+    v = reinterpret_cast<T>(reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr->owner_id);
+#else
     v = reinterpret_cast<T>(PointerRNA_OWNER_ID( reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr) );
+#endif
 }
 }
 
 //----------------------------------------------------------------------------------------------------------------------
 
 #define MSBLEN_BOILERPLATE2(Type, BType)\
-    using btype = ::BType;\
+    using btype = BType;\
     static StructRNA *s_type;\
-    ::BType *m_ptr;\
+    BType *m_ptr;\
     static StructRNA* type() { return s_type; }\
-    Type(const void *p) : m_ptr((::BType*)p) {}\
-    Type(py::object p) : m_ptr(rna_data<::BType*>(p)) {}\
-    ::BType* ptr() {return m_ptr; }
+    Type(const void *p) : m_ptr((BType*)p) {}\
+    Type(py::object p) : m_ptr(rna_data<BType*>(p)) {}\
+    BType* ptr() {return m_ptr; }
 
 #define MSBLEN_BOILERPLATE(Type) MSBLEN_BOILERPLATE2(B##Type, Type)
 

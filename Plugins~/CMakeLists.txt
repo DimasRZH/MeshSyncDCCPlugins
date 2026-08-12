@@ -39,6 +39,9 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 elseif(WIN32) 
     set(PLATFORM "Windows")
     add_definitions(-DmuEnablePPL)
+    # Blender ships the VS 2019 CRT; keep mutex construction ABI-compatible
+    # when this plugin is built with newer MSVC toolsets.
+    add_definitions(-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
     
     # Additional Poco Net dependencies on Windows
     list(APPEND Poco_LIBRARIES "ws2_32.lib;Iphlpapi.lib" )       
@@ -147,6 +150,10 @@ list(APPEND BLENDER_VERSIONS
     BLENDER_3.3.0
     BLENDER_3.4.0
 ) 
+
+if(WIN32)
+    list(APPEND BLENDER_VERSIONS BLENDER_5.0.0 BLENDER_5.1.1)
+endif()
 
 if(BUILD_BLENDER_ALL)
     foreach(CUR_BLENDER_VER IN LISTS BLENDER_VERSIONS)

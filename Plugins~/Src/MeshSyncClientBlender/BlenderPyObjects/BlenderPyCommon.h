@@ -1,6 +1,10 @@
 #pragma once
 
+#if BLENDER_VERSION >= 500
+#include <RNA_define.hh> //PropertyRNA
+#else
 #include <RNA_define.h> //PropertyRNA
+#endif
 #include "MeshSync/msFoundation.h" //msPacked
 #include "msblenMacros.h"
 
@@ -9,9 +13,7 @@ namespace blender {
 template<typename Self>
 static inline void* get_pointer(Self *self, PropertyRNA *prop)
 {
-    PointerRNA ptr;
-    ptr.data = self;
-    PointerRNA_OWNER_ID(ptr) = PointerRNA_OWNER_ID_CAST(self);
+    PointerRNA ptr{PointerRNA_OWNER_ID_CAST(self), nullptr, self};
 
     PointerRNA ret = ((PointerPropertyRNA*)prop)->get(&ptr);
     return ret.data;
@@ -20,9 +22,7 @@ static inline void* get_pointer(Self *self, PropertyRNA *prop)
 template<typename Self>
 static inline int GetInt(Self *self, PropertyRNA *prop)
 {
-    PointerRNA ptr;
-    ptr.data = self;
-    PointerRNA_OWNER_ID(ptr) = PointerRNA_OWNER_ID_CAST(self);
+    PointerRNA ptr{PointerRNA_OWNER_ID_CAST(self), nullptr, self};
 
     return ((IntPropertyRNA*)prop)->get(&ptr);
 }
@@ -30,9 +30,7 @@ static inline int GetInt(Self *self, PropertyRNA *prop)
 template<typename Self>
 static inline void SetInt(Self *self, PropertyRNA *prop, const int value)
 {
-    PointerRNA ptr;
-    ptr.data = self;
-    PointerRNA_OWNER_ID(ptr) = PointerRNA_OWNER_ID_CAST(self);
+    PointerRNA ptr{PointerRNA_OWNER_ID_CAST(self), nullptr, self};
     reinterpret_cast<IntPropertyRNA*>(prop)->set(&ptr, value);
 }
 

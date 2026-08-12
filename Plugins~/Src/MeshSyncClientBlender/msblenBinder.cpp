@@ -10,6 +10,9 @@
 #include "BlenderPyObjects/BlenderPyContext.h"
 #include "BlenderPyObjects/BlenderPyScene.h"
 #include "BlenderPyObjects/BlenderPyCommon.h" //call, etc
+#if BLENDER_VERSION >= 501
+#include <BLI_listbase.h>
+#endif
 
 namespace blender {
 
@@ -32,7 +35,7 @@ static FunctionRNA* BObject_to_mesh;
 static FunctionRNA* BObject_to_mesh_clear;
 static FunctionRNA* BObject_modifiers_clear;
 
-StructRNA* BMesh::s_type;
+StructRNA* BlenderMesh::s_type;
 static FunctionRNA* BMesh_calc_normals_split;
 static FunctionRNA* BMesh_update;
 static FunctionRNA* BMesh_clear_geometry;
@@ -41,8 +44,23 @@ static FunctionRNA* BMesh_polygons_add;
 static FunctionRNA* BMesh_loops_add;
 static FunctionRNA* BMesh_edges_add;
 static FunctionRNA* BMesh_normals_add;
+static PropertyRNA* BMesh_vertices;
+static PropertyRNA* BMesh_polygons;
+static PropertyRNA* BMesh_loops;
+static PropertyRNA* BMesh_corner_normals;
+static PropertyRNA* BMesh_uv_layers;
 static PropertyRNA* UVLoopLayers_active;
 static PropertyRNA* LoopColors_active;
+#if BLENDER_VERSION >= 500
+static StructRNA* MeshLoop_s_type;
+static PropertyRNA* MeshLoop_normal;
+static StructRNA* MeshPolygon_s_type;
+static PropertyRNA* MeshPolygon_material_index;
+static PropertyRNA* MeshUVLoopLayer_uv;
+#if BLENDER_VERSION >= 501
+static PropertyRNA* MeshLoopColorLayer_data;
+#endif
+#endif
 
 StructRNA* BCurve::s_type;
 static PropertyRNA* BCurve_splines;
@@ -99,28 +117,61 @@ bool ready()
 // context: bpi.context in python
 void setup(py::object bpy_context)
 {
-    if (g_context)
+    static bool initialized = false;
+    if (initialized)
         return;
 
-    BPy_StructRNA* rna = (BPy_StructRNA*)bpy_context.ptr();
-    if (strcmp(rna->ob_base.ob_type->tp_name, "Context") != 0) {
-        return;
+#if BLENDER_VERSION >= 501
+    std::vector<StructRNA*> types;
+    auto bpy_types = py::module_::import("bpy").attr("types");
+    const char* type_names[] = {
+        "ID", "Object", "ObjectModifiers", "Mesh", "MeshVertices", "MeshPolygons",
+        "MeshLoops", "MeshLoop", "MeshPolygon", "MeshUVLoopLayer", "MeshLoopColorLayer", "MeshEdges", "Curve", "CurveSplines",
+        "SplineBezierPoints", "UVLoopLayers", "LoopColors", "Camera", "Material", "Scene",
+        "BlendData", "BlendDataObjects", "BlendDataMeshes", "Context", "Depsgraph",
+        "DepsgraphObjectInstance"};
+    for (const char* name : type_names) {
+        if (!py::hasattr(bpy_types, name))
+            continue;
+        auto bl_rna = bpy_types.attr(name).attr("bl_rna");
+        types.push_back(reinterpret_cast<StructRNA*>(
+            bl_rna.attr("as_pointer")().cast<uintptr_t>()));
     }
-
+#elif BLENDER_VERSION >= 500
+    BPy_StructRNA* rna = (BPy_StructRNA*)bpy_context.ptr();
+    if (!rna->ptr)
+        return;
+    auto first_type = (StructRNA*)&rna->ptr->type->cont;
+    while (first_type->cont.prev) {
+        first_type = (StructRNA*)first_type->cont.prev;
+    }
+#else
+    BPy_StructRNA* rna = (BPy_StructRNA*)bpy_context.ptr();
     auto first_type = (StructRNA*)&rna->ptr.type->cont;
     while (first_type->cont.prev) {
         first_type = (StructRNA*)first_type->cont.prev;
     }
+#endif
     rna_sdata(bpy_context, g_context);
 
     // resolve blender types and functions
 #define match_type(N) strcmp(type->identifier, N) == 0
 #define match_func(N) strcmp(func->identifier, N) == 0
 #define match_prop(N) strcmp(prop->identifier, N) == 0
+#if BLENDER_VERSION >= 501
+#define each_func for (const auto& function : type->functions) if (auto* func = function.get())
+#define each_type for (auto* type : types)
+#else
 #define each_func for (auto *func : list_range((FunctionRNA*)type->functions.first))
+#define each_type for (auto *type : list_range((StructRNA*)first_type))
+#endif
+#if BLENDER_VERSION >= 501
+#define each_prop for (auto &property : type->cont.properties) if (auto* prop = &property)
+#else
 #define each_prop for (auto *prop : list_range((PropertyRNA*)type->cont.properties.first))
+#endif
 
-    for (auto *type : list_range((StructRNA*)first_type)) {
+    each_type {
         if (match_type("ID")) {
             BlenderPyID::s_type = type;
             each_prop{
@@ -154,7 +205,14 @@ void setup(py::object bpy_context)
             }
         }        
         else if (match_type("Mesh")) {
-            BMesh::s_type = type;
+            BlenderMesh::s_type = type;
+            each_prop {
+                if (match_prop("vertices")) BMesh_vertices = prop;
+                if (match_prop("polygons")) BMesh_polygons = prop;
+                if (match_prop("loops")) BMesh_loops = prop;
+                if (match_prop("corner_normals")) BMesh_corner_normals = prop;
+                if (match_prop("uv_layers")) BMesh_uv_layers = prop;
+            }
             each_func {
                 if (match_func("calc_normals_split")) BMesh_calc_normals_split = func;
                 if (match_func("update")) BMesh_update = func;
@@ -176,6 +234,32 @@ void setup(py::object bpy_context)
                 if (match_func("add")) BMesh_loops_add = func;
             }
         }
+#if BLENDER_VERSION >= 500
+        else if (match_type("MeshLoop")) {
+            MeshLoop_s_type = type;
+            each_prop{
+                if (match_prop("normal")) MeshLoop_normal = prop;
+            }
+        }
+        else if (match_type("MeshPolygon")) {
+            MeshPolygon_s_type = type;
+            each_prop{
+                if (match_prop("material_index")) MeshPolygon_material_index = prop;
+            }
+        }
+        else if (match_type("MeshUVLoopLayer")) {
+            each_prop {
+                if (match_prop("uv")) MeshUVLoopLayer_uv = prop;
+            }
+        }
+#if BLENDER_VERSION >= 501
+        else if (match_type("MeshLoopColorLayer")) {
+            each_prop {
+                if (match_prop("data")) MeshLoopColorLayer_data = prop;
+            }
+        }
+#endif
+#endif
         else if (match_type("MeshEdges")) {
             each_func{
                 if (match_func("add")) BMesh_edges_add = func;
@@ -299,6 +383,7 @@ void setup(py::object bpy_context)
             }
         }
     }
+    initialized = BlenderPyContext_scene != nullptr;
 #undef each_iprop
 #undef each_nprop
 #undef each_func
@@ -411,7 +496,118 @@ blist_range<bDeformGroup> BObject::deform_groups()
 }
 
 
-barray_range<MLoop> BMesh::indices()
+#if BLENDER_VERSION >= 500
+barray_range<int> BlenderMesh::indices()
+{
+#if BLENDER_VERSION >= 501
+    auto* prop = reinterpret_cast<CollectionPropertyRNA*>(BMesh_loops);
+    if (!prop)
+        return { nullptr, 0 };
+    PointerRNA ptr{};
+    ptr.owner_id = &m_ptr->id;
+    ptr.type = s_type;
+    ptr.data = m_ptr;
+    CollectionPropertyIterator iter{};
+    prop->begin(&iter, &ptr);
+    if (!iter.valid || !iter.internal.array.ptr || iter.internal.array.length <= 0)
+        return { nullptr, 0 };
+    return { reinterpret_cast<int*>(iter.internal.array.ptr), static_cast<size_t>(iter.internal.array.length) };
+#else
+    auto* data = static_cast<int*>(msCustomData_get_layer_named(
+        &m_ptr->corner_data, CD_PROP_INT32, ".corner_vert"));
+    return { data, data ? static_cast<size_t>(m_ptr->corners_num) : 0 };
+#endif
+}
+
+barray_range<int> BlenderMesh::face_offsets()
+{
+    return { m_ptr->face_offset_indices, static_cast<size_t>(m_ptr->faces_num + 1) };
+}
+
+barray_range<mu::float3> BlenderMesh::vertices()
+{
+#if BLENDER_VERSION >= 501
+    auto* prop = reinterpret_cast<CollectionPropertyRNA*>(BMesh_vertices);
+    if (!prop)
+        return { nullptr, 0 };
+    PointerRNA ptr{};
+    ptr.owner_id = &m_ptr->id;
+    ptr.type = s_type;
+    ptr.data = m_ptr;
+    CollectionPropertyIterator iter{};
+    prop->begin(&iter, &ptr);
+    if (!iter.valid || !iter.internal.array.ptr || iter.internal.array.length <= 0)
+        return { nullptr, 0 };
+    return { reinterpret_cast<mu::float3*>(iter.internal.array.ptr), static_cast<size_t>(iter.internal.array.length) };
+#else
+    auto* data = static_cast<mu::float3*>(msCustomData_get_layer_named(
+        &m_ptr->vert_data, CD_PROP_FLOAT3, "position"));
+    return { data, data ? static_cast<size_t>(m_ptr->verts_num) : 0 };
+#endif
+}
+
+barray_range<MDeformVert> BlenderMesh::deform_vertices()
+{
+    auto* data = static_cast<MDeformVert*>(msCustomData_get_layer_n(
+        &m_ptr->vert_data, CD_MDEFORMVERT, 0));
+    return { data, data ? static_cast<size_t>(m_ptr->verts_num) : 0 };
+}
+
+mu::float3 BlenderMesh::normal(int index) const
+{
+    mu::float3 ret{};
+#if BLENDER_VERSION >= 501
+    if (!BMesh_corner_normals || index < 0)
+        return ret;
+    auto* prop = reinterpret_cast<CollectionPropertyRNA*>(BMesh_corner_normals);
+    PointerRNA ptr{};
+    ptr.owner_id = &m_ptr->id;
+    ptr.type = s_type;
+    ptr.data = m_ptr;
+    CollectionPropertyIterator iter{};
+    prop->begin(&iter, &ptr);
+    if (iter.valid && iter.internal.array.ptr && index < iter.internal.array.length)
+        ret = *reinterpret_cast<mu::float3*>(iter.internal.array.ptr + index * iter.internal.array.itemsize);
+    if (prop->end)
+        prop->end(&iter);
+#else
+    auto indices = const_cast<BlenderMesh*>(this)->indices();
+    if (!MeshLoop_normal || index < 0 || static_cast<size_t>(index) >= indices.size())
+        return ret;
+
+    PointerRNA ptr{};
+    ptr.data = &indices[index];
+    PointerRNA_OWNER_ID(ptr) = &m_ptr->id;
+    ptr.type = MeshLoop_s_type;
+    reinterpret_cast<FloatPropertyRNA*>(MeshLoop_normal)->getarray(&ptr, &ret.x);
+#endif
+    return ret;
+}
+
+void BlenderMesh::set_material_index(int index, int value)
+{
+    if (!MeshPolygon_material_index || index < 0 || index >= m_ptr->faces_num)
+        return;
+
+    PointerRNA ptr{};
+    ptr.data = &m_ptr->face_offset_indices[index];
+    PointerRNA_OWNER_ID(ptr) = &m_ptr->id;
+    ptr.type = MeshPolygon_s_type;
+    reinterpret_cast<IntPropertyRNA*>(MeshPolygon_material_index)->set(&ptr, value);
+}
+
+int BlenderMesh::material_index(int index) const
+{
+    if (!MeshPolygon_material_index || index < 0 || index >= m_ptr->faces_num)
+        return 0;
+    PointerRNA ptr{};
+    ptr.data = &m_ptr->face_offset_indices[index];
+    ptr.owner_id = &m_ptr->id;
+    ptr.type = MeshPolygon_s_type;
+    return reinterpret_cast<IntPropertyRNA*>(MeshPolygon_material_index)->get(&ptr);
+}
+#else
+barray_range<MLoop> BlenderMesh::indices()
 {
 #if BLENDER_VERSION >= 304
     return{ (MLoop*)CustomData_get(m_ptr->ldata, CD_MLOOP), (size_t)m_ptr->totloop };
@@ -419,11 +615,11 @@ barray_range<MLoop> BMesh::indices()
     return { m_ptr->mloop, (size_t)m_ptr->totloop };
 #endif
 }
-barray_range<MEdge> BMesh::edges()
+barray_range<MEdge> BlenderMesh::edges()
 {
     return { m_ptr->medge, (size_t)m_ptr->totedge };
 }
-barray_range<MPoly> BMesh::polygons()
+barray_range<MPoly> BlenderMesh::polygons()
 {
 #if BLENDER_VERSION >= 304
     return { (MPoly*)CustomData_get(m_ptr->pdata, CD_MPOLY), (size_t)m_ptr->totpoly };
@@ -432,7 +628,7 @@ barray_range<MPoly> BMesh::polygons()
 #endif
 }
 
-barray_range<MVert> BMesh::vertices()
+barray_range<MVert> BlenderMesh::vertices()
 {
 #if BLENDER_VERSION >= 304
     return { (MVert*)CustomData_get(m_ptr->vdata, CD_MVERT),(size_t) m_ptr->totvert};
@@ -440,22 +636,39 @@ barray_range<MVert> BMesh::vertices()
     return { m_ptr->mvert, (size_t)m_ptr->totvert };
 #endif
 }
-barray_range<mu::float3> BMesh::normals()
+#endif
+barray_range<mu::float3> BlenderMesh::normals()
 {
-    if (CustomData_number_of_layers(&m_ptr->ldata, CD_NORMAL) > 0) {
+#if BLENDER_VERSION >= 500
+    if (msCustomData_number_of_layers(&m_ptr->corner_data, CD_NORMAL) > 0) {
+        auto data = (mu::float3*)CustomData_get(m_ptr->corner_data, CD_NORMAL);
+        if (data != nullptr)
+            return { data, (size_t)m_ptr->corners_num };
+    }
+#else
+    if (msCustomData_number_of_layers(&m_ptr->ldata, CD_NORMAL) > 0) {
         auto data = (mu::float3*)CustomData_get(m_ptr->ldata, CD_NORMAL);
         if (data != nullptr)
             return { data, (size_t)m_ptr->totloop };
     }
+#endif
     return { nullptr, (size_t)0 };
 }
 
 #if BLENDER_VERSION >= 304
-barray_range<int> BMesh::material_indices()
+barray_range<int> BlenderMesh::material_indices()
 {
-    auto layer = (int*)CustomData_get_layer_named(&m_ptr->pdata, CD_PROP_INT32, "material_index");
+#if BLENDER_VERSION >= 501
+    return { nullptr, 0 };
+#elif BLENDER_VERSION >= 500
+    auto layer = (int*)msCustomData_get_layer_named(&m_ptr->face_data, CD_PROP_INT32, "material_index");
+    if (layer)
+        return { layer, (size_t)m_ptr->faces_num };
+#else
+    auto layer = (int*)msCustomData_get_layer_named(&m_ptr->pdata, CD_PROP_INT32, "material_index");
     if (layer)
         return { layer, (size_t)m_ptr->totpoly };
+#endif
 
     return { nullptr, (size_t)0 };
 }
@@ -463,63 +676,140 @@ barray_range<int> BMesh::material_indices()
 
 //----------------------------------------------------------------------------------------------------------------------
 
-barray_range<MLoopUV> BMesh::uv()
+uint32_t BlenderMesh::GetNumUVs() const
 {
-    CustomDataLayer* layer_data = static_cast<CustomDataLayer*>(get_pointer(m_ptr, UVLoopLayers_active));
-    if (layer_data && layer_data->data)
-        return { static_cast<MLoopUV*>(layer_data->data), static_cast<size_t>(m_ptr->totloop) };
-    else
-        return { nullptr, (size_t)0 };
+#if BLENDER_VERSION >= 501
+    if (!BMesh_uv_layers)
+        return 0;
+    PointerRNA ptr{};
+    ptr.owner_id = &m_ptr->id;
+    ptr.type = s_type;
+    ptr.data = m_ptr;
+    auto* prop = reinterpret_cast<CollectionPropertyRNA*>(BMesh_uv_layers);
+    return prop->length ? static_cast<uint32_t>(prop->length(&ptr)) : 0;
+#elif BLENDER_VERSION >= 500
+    return msCustomData_number_of_layers(&m_ptr->corner_data, CD_PROP_FLOAT2);
+#else
+    return msCustomData_number_of_layers(&m_ptr->ldata, CD_MLOOPUV);
+#endif
 }
 
-MLoopUV* BMesh::GetUV(const int index) const {
-    return static_cast<MLoopUV *>(CustomData_get_layer_n(&m_ptr->ldata, CD_MLOOPUV, index));
+#if BLENDER_VERSION >= 501
+const ::blender::float2* BlenderMesh::GetUV(const int index) const {
+    if (!BMesh_uv_layers || index < 0)
+        return nullptr;
+
+    auto* layers = reinterpret_cast<CollectionPropertyRNA*>(BMesh_uv_layers);
+    PointerRNA mesh_ptr{};
+    mesh_ptr.owner_id = &m_ptr->id;
+    mesh_ptr.type = s_type;
+    mesh_ptr.data = m_ptr;
+    CollectionPropertyIterator layer_iter{};
+    layers->begin(&layer_iter, &mesh_ptr);
+
+    const ::blender::float2* result = nullptr;
+    for (int i = 0; layer_iter.valid && i <= index; ++i) {
+        if (i == index) {
+            PointerRNA layer = layers->get(&layer_iter);
+            auto* data = reinterpret_cast<CollectionPropertyRNA*>(MeshUVLoopLayer_uv);
+            if (data) {
+                CollectionPropertyIterator data_iter{};
+                data->begin(&data_iter, &layer);
+                result = reinterpret_cast<const ::blender::float2*>(data_iter.internal.array.ptr);
+            }
+            break;
+        }
+        layers->next(&layer_iter);
+    }
+    if (layers->end)
+        layers->end(&layer_iter);
+    return result;
 }
+#elif BLENDER_VERSION >= 500
+const ::blender::float2* BlenderMesh::GetUV(const int index) const {
+    return static_cast<const ::blender::float2 *>(
+        msCustomData_get_layer_n(&m_ptr->corner_data, CD_PROP_FLOAT2, index));
+}
+#else
+MLoopUV* BlenderMesh::GetUV(const int index) const {
+    return static_cast<MLoopUV *>(msCustomData_get_layer_n(&m_ptr->ldata, CD_MLOOPUV, index));
+}
+#endif
 
 //----------------------------------------------------------------------------------------------------------------------
 
 
-barray_range<MLoopCol> BMesh::colors()
+barray_range<MLoopCol> BlenderMesh::colors()
 {
+#if BLENDER_VERSION >= 501
+    if (!LoopColors_active || !MeshLoopColorLayer_data)
+        return { nullptr, 0 };
+
+    PointerRNA mesh_ptr{&m_ptr->id, s_type, m_ptr};
+    PointerRNA layer = reinterpret_cast<PointerPropertyRNA*>(LoopColors_active)->get(&mesh_ptr);
+    if (!layer.data)
+        return { nullptr, 0 };
+
+    auto* data = reinterpret_cast<CollectionPropertyRNA*>(MeshLoopColorLayer_data);
+    CollectionPropertyIterator iter{};
+    data->begin(&iter, &layer);
+    if (!iter.valid || !iter.internal.array.ptr || iter.internal.array.length <= 0)
+        return { nullptr, 0 };
+    return { reinterpret_cast<MLoopCol*>(iter.internal.array.ptr),
+             static_cast<size_t>(iter.internal.array.length) };
+#else
     auto layer_data = (CustomDataLayer*)get_pointer(m_ptr, LoopColors_active);
     if (layer_data && layer_data->data)
+#if BLENDER_VERSION >= 500
+        return { (MLoopCol*)layer_data->data, (size_t)m_ptr->corners_num };
+#else
         return { (MLoopCol*)layer_data->data, (size_t)m_ptr->totloop };
+#endif
     else
         return { nullptr, (size_t)0 };
+#endif
 }
 
-void BMesh::calc_normals_split()
+void BlenderMesh::calc_normals_split()
 {
+#if BLENDER_VERSION >= 500
+    if (!BMesh_calc_normals_split)
+        return;
+#endif
     call<Mesh, void>(g_context, m_ptr, BMesh_calc_normals_split);
 }
 
-void BMesh::update() 
+void BlenderMesh::update()
 {
+#if BLENDER_VERSION >= 501
+    call<Mesh, void, bool, bool>(g_context, m_ptr, BMesh_update, false, false);
+#else
     call<Mesh, void>(g_context, m_ptr, BMesh_update);    
+#endif
 }
 
-void BMesh::clear_geometry()
+void BlenderMesh::clear_geometry()
 {
     call<Mesh, void>(g_context, m_ptr, BMesh_clear_geometry);
 }
 
-void BMesh::add_vertices(int count) {
+void BlenderMesh::add_vertices(int count) {
     call<Mesh, void, int>(g_context, m_ptr, BMesh_vertices_add, count);
 }
 
-void BMesh::add_polygons(int count) {
+void BlenderMesh::add_polygons(int count) {
     call<Mesh, void, int>(g_context, m_ptr, BMesh_polygons_add, count);
 }
 
-void BMesh::add_loops(int count) {
+void BlenderMesh::add_loops(int count) {
     call<Mesh, void, int>(g_context, m_ptr, BMesh_loops_add, count);
 }
 
-void BMesh::add_edges(int count) {
+void BlenderMesh::add_edges(int count) {
     call<Mesh, void, int>(g_context, m_ptr, BMesh_edges_add, count);
 }
 
-void BMesh::add_normals(int count) {
+void BlenderMesh::add_normals(int count) {
     call<Mesh, void, int>(g_context, m_ptr, BMesh_normals_add, count);
 }
 
@@ -535,22 +825,26 @@ barray_range<BMVert*> BEditMesh::vertices()
 
 barray_range<BMTriangle> BEditMesh::triangles()
 {
+#if BLENDER_VERSION >= 500
+    return { m_ptr->looptris.data(), static_cast<size_t>(m_ptr->looptris.size()) };
+#else
     return barray_range<BMTriangle> { m_ptr->looptris, (size_t)m_ptr->tottri };
+#endif
 }
 
 int BEditMesh::uv_data_offset(int index) const
 {
-    int layer_index = CustomData_get_layer_index_n(&m_ptr->bm->ldata, CD_MLOOPUV, index);
+#if BLENDER_VERSION >= 500
+    int layer_index = msCustomData_get_layer_index_n(&m_ptr->bm->ldata, CD_PROP_FLOAT2, index);
+#else
+    int layer_index = msCustomData_get_layer_index_n(&m_ptr->bm->ldata, CD_MLOOPUV, index);
+#endif
     if (layer_index == -1) {
         return NULL;
     }
 
     auto layer = m_ptr->bm->ldata.layers[layer_index];
     return layer.offset;
-}
-
-MLoopUV* BEditMesh::GetUV(const int index) const {
-    return static_cast<MLoopUV *>(CustomData_get_layer_n(&m_ptr->bm->ldata, CD_MLOOPUV, index));
 }
 
 void BNurb::add_bezier_points(int count, Object* obj) {

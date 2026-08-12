@@ -1,6 +1,10 @@
 #pragma once
 
+#if BLENDER_VERSION >= 500
+#include <BKE_context.hh> //bContext
+#else
 #include <BKE_context.h> //bContext
+#endif
 #include "MeshUtils/muMath.h"
 
 namespace blender
