@@ -42,7 +42,7 @@ namespace py = pybind11;
 #endif
 #pragma warning( push )
 #pragma warning( disable : 4200 ) // zero length array
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 #include "BKE_main.hh"
 #include "BKE_customdata.hh"
 #include "BKE_context.hh"
@@ -69,7 +69,7 @@ namespace py = pybind11;
 #include "DNA_armature_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 #include "DNA_grease_pencil_types.h"
 #else
 #include "DNA_gpencil_types.h" //bGPdata
@@ -92,7 +92,7 @@ namespace py = pybind11;
 #include "BLI_utildefines.h"
 #include "BLI_math_base.h"
 #include "BLI_math_vector.h"
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 #include "bmesh_class.hh"
 #include "intern/rna_internal_types.hh"
 #include "intern/bpy_rna.hh"

@@ -71,6 +71,7 @@ This allows devs to immediately see how things will look in-game while modelling
 | Blender 3.2        | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Blender 3.3        | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Blender 3.4        | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Blender 4.5 LTS    | :white_check_mark: |                    |                    |
 | Blender 5.0        | :white_check_mark: |                    |                    |
 | Blender 5.1        | :white_check_mark: |                    |                    |
 
@@ -78,7 +79,7 @@ Notes:
 * :white_check_mark: : Supported
 * :x: : Impossible to support (platform unsupported by the DCC, etc)
 * empty : May be supported in the future
-* Blender 5.0 and 5.1 on Windows use [manual installation](Documentation~/Installation.md); MeshSync 0.17.3's automatic DCC detector does not list them yet.
+* Blender 4.5, 5.0 and 5.1 on Windows use [manual installation](Documentation~/Installation.md); MeshSync 0.17.3's automatic DCC detector does not list them yet.
 
 # DCC Plugin Installation
 
@@ -87,6 +88,10 @@ Notes:
 [MeshSync](https://docs.unity3d.com/Packages/com.unity.meshsync@latest)'s Preferences page
 provides easy installation on several DCC tools.  
 Alternatively, [Manual Installation](Documentation~/Installation.md) is also available.
+
+## 3D team quick setup
+
+For a no-source-code handoff, give the team the generated `com.unity.meshsync.dcc-plugins-*.tgz` package from the release folder. In Unity, open **Window > Package Manager**, click **+**, choose **Add package from tarball**, and select that file. Unity will install the MeshSync core package automatically. Then follow [the Blender setup guide](Documentation~/3D_Team_Quick_Start.md) to install the matching Blender 4.5, 5.0 or 5.1.1 add-on.
 
 ## Usage in DCC Tools
 

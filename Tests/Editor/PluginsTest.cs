@@ -16,9 +16,10 @@ class PluginsTest {
 	}
 
 	[Test]
-	public void Blender5WindowsPluginsExist() {
+	public void BlenderWindowsPluginsExist() {
 		string path = Path.GetFullPath(Path.Combine("Packages", "com.unity.meshsync.dcc-plugins", "Editor", "Plugins", "UnityMeshSync_Blender_Windows.zip"));
 		using (ZipArchive archive = new ZipArchive(File.OpenRead(path), ZipArchiveMode.Read)) {
+			Assert.IsNotNull(archive.GetEntry("UnityMeshSync_0.17.1-preview_Blender_Windows/blender-4.5.14.zip"));
 			Assert.IsNotNull(archive.GetEntry("UnityMeshSync_0.17.1-preview_Blender_Windows/blender-5.0.0.zip"));
 			Assert.IsNotNull(archive.GetEntry("UnityMeshSync_0.17.1-preview_Blender_Windows/blender-5.1.1.zip"));
 		}

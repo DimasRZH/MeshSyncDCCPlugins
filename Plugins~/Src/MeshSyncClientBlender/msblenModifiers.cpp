@@ -23,7 +23,7 @@ void msblenModifiers::importProperties(std::vector<ms::PropertyInfo> props) {}
 
 std::mutex m_mutex;
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 using ModifierSocket = bNodeTreeInterfaceSocket;
 
 ModifierSocket* findSocketForProperty(IDProperty* property, bNodeTreeInterfacePanel& panel) {

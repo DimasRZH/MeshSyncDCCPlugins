@@ -1,6 +1,6 @@
 #pragma once
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 #include <RNA_define.hh> //PropertyRNA
 #else
 #include <RNA_define.h> //PropertyRNA

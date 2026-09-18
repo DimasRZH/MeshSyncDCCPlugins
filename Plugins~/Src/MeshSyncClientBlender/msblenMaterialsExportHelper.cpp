@@ -1,6 +1,6 @@
 #include "msblenMaterialsExportHelper.h"
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 #include <BKE_node.hh>
 #include <BKE_node_legacy_types.hh>
 #else
@@ -13,7 +13,7 @@
 #include "MeshSync/Utility/msMaterialExt.h"
 
 namespace blender {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 static int node_type(const bNode* node) { return node->type_legacy; }
 #else
 static int node_type(const bNode* node) { return node->type; }

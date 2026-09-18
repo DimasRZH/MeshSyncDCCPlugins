@@ -51,7 +51,7 @@ static PropertyRNA* BMesh_corner_normals;
 static PropertyRNA* BMesh_uv_layers;
 static PropertyRNA* UVLoopLayers_active;
 static PropertyRNA* LoopColors_active;
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 static StructRNA* MeshLoop_s_type;
 static PropertyRNA* MeshLoop_normal;
 static StructRNA* MeshPolygon_s_type;
@@ -137,7 +137,7 @@ void setup(py::object bpy_context)
         types.push_back(reinterpret_cast<StructRNA*>(
             bl_rna.attr("as_pointer")().cast<uintptr_t>()));
     }
-#elif BLENDER_VERSION >= 500
+#elif BLENDER_VERSION >= 405
     BPy_StructRNA* rna = (BPy_StructRNA*)bpy_context.ptr();
     if (!rna->ptr)
         return;
@@ -234,7 +234,7 @@ void setup(py::object bpy_context)
                 if (match_func("add")) BMesh_loops_add = func;
             }
         }
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
         else if (match_type("MeshLoop")) {
             MeshLoop_s_type = type;
             each_prop{
@@ -496,7 +496,7 @@ blist_range<bDeformGroup> BObject::deform_groups()
 }
 
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 barray_range<int> BlenderMesh::indices()
 {
 #if BLENDER_VERSION >= 501
@@ -639,7 +639,7 @@ barray_range<MVert> BlenderMesh::vertices()
 #endif
 barray_range<mu::float3> BlenderMesh::normals()
 {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     if (msCustomData_number_of_layers(&m_ptr->corner_data, CD_NORMAL) > 0) {
         auto data = (mu::float3*)CustomData_get(m_ptr->corner_data, CD_NORMAL);
         if (data != nullptr)
@@ -660,7 +660,7 @@ barray_range<int> BlenderMesh::material_indices()
 {
 #if BLENDER_VERSION >= 501
     return { nullptr, 0 };
-#elif BLENDER_VERSION >= 500
+#elif BLENDER_VERSION >= 405
     auto layer = (int*)msCustomData_get_layer_named(&m_ptr->face_data, CD_PROP_INT32, "material_index");
     if (layer)
         return { layer, (size_t)m_ptr->faces_num };
@@ -687,7 +687,7 @@ uint32_t BlenderMesh::GetNumUVs() const
     ptr.data = m_ptr;
     auto* prop = reinterpret_cast<CollectionPropertyRNA*>(BMesh_uv_layers);
     return prop->length ? static_cast<uint32_t>(prop->length(&ptr)) : 0;
-#elif BLENDER_VERSION >= 500
+#elif BLENDER_VERSION >= 405
     return msCustomData_number_of_layers(&m_ptr->corner_data, CD_PROP_FLOAT2);
 #else
     return msCustomData_number_of_layers(&m_ptr->ldata, CD_MLOOPUV);
@@ -725,7 +725,7 @@ const ::blender::float2* BlenderMesh::GetUV(const int index) const {
         layers->end(&layer_iter);
     return result;
 }
-#elif BLENDER_VERSION >= 500
+#elif BLENDER_VERSION >= 405
 const ::blender::float2* BlenderMesh::GetUV(const int index) const {
     return static_cast<const ::blender::float2 *>(
         msCustomData_get_layer_n(&m_ptr->corner_data, CD_PROP_FLOAT2, index));
@@ -760,7 +760,7 @@ barray_range<MLoopCol> BlenderMesh::colors()
 #else
     auto layer_data = (CustomDataLayer*)get_pointer(m_ptr, LoopColors_active);
     if (layer_data && layer_data->data)
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
         return { (MLoopCol*)layer_data->data, (size_t)m_ptr->corners_num };
 #else
         return { (MLoopCol*)layer_data->data, (size_t)m_ptr->totloop };
@@ -772,7 +772,7 @@ barray_range<MLoopCol> BlenderMesh::colors()
 
 void BlenderMesh::calc_normals_split()
 {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     if (!BMesh_calc_normals_split)
         return;
 #endif
@@ -781,8 +781,10 @@ void BlenderMesh::calc_normals_split()
 
 void BlenderMesh::update()
 {
-#if BLENDER_VERSION >= 501
-    call<Mesh, void, bool, bool>(g_context, m_ptr, BMesh_update, false, false);
+#if BLENDER_VERSION >= 405
+    // Mesh.update(calc_edges=False, calc_edges_loose=False). RNA pads every parameter
+    // to 8 bytes (rna_parameter_size_pad), so pass the bools as 8-byte slots.
+    call<Mesh, void, uint64_t, uint64_t>(g_context, m_ptr, BMesh_update, 0, 0);
 #else
     call<Mesh, void>(g_context, m_ptr, BMesh_update);    
 #endif
@@ -825,7 +827,7 @@ barray_range<BMVert*> BEditMesh::vertices()
 
 barray_range<BMTriangle> BEditMesh::triangles()
 {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     return { m_ptr->looptris.data(), static_cast<size_t>(m_ptr->looptris.size()) };
 #else
     return barray_range<BMTriangle> { m_ptr->looptris, (size_t)m_ptr->tottri };
@@ -834,7 +836,7 @@ barray_range<BMTriangle> BEditMesh::triangles()
 
 int BEditMesh::uv_data_offset(int index) const
 {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     int layer_index = msCustomData_get_layer_index_n(&m_ptr->bm->ldata, CD_PROP_FLOAT2, index);
 #else
     int layer_index = msCustomData_get_layer_index_n(&m_ptr->bm->ldata, CD_MLOOPUV, index);

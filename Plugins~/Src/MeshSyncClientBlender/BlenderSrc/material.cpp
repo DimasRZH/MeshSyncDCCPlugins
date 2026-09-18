@@ -102,7 +102,7 @@ Material ***BKE_object_material_array_p(Object *ob)
     MetaBall *mb = reinterpret_cast<MetaBall*>(ob->data);
     return &(mb->mat);
   }
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
   if (ob->type == OB_GREASE_PENCIL) {
     GreasePencil *grease_pencil = reinterpret_cast<GreasePencil*>(ob->data);
     return &(grease_pencil->material_array);
@@ -143,7 +143,7 @@ short *BKE_object_material_len_p(Object *ob)
     MetaBall *mb = reinterpret_cast<MetaBall*>(ob->data);
     return &(mb->totcol);
   }
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
   if (ob->type == OB_GREASE_PENCIL) {
     GreasePencil *grease_pencil = reinterpret_cast<GreasePencil*>(ob->data);
     return &(grease_pencil->material_array_num);

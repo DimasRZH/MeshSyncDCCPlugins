@@ -24,7 +24,7 @@ int BlenderPyScene::GetCurrentFrame() const{ return GetInt(m_ptr, BlenderPyScene
 float BlenderPyScene::GetCurrentSubframe() const { return m_ptr->r.subframe; }
 
 void BlenderPyScene::SetCurrentFrame(int frame, Depsgraph* depsgraph, float subframe) {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     frame_set(frame, subframe);
 #else
     SetInt(m_ptr, BlenderPyScene_frame_current, frame);

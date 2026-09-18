@@ -1,6 +1,6 @@
 #include "pch.h"
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 
 #include <cstddef>
 #include <cstdlib>
@@ -87,7 +87,7 @@ static void* msblen_mem_malloc_aligned(size_t size, size_t alignment)
     return head + 1;
 }
 
-#if BLENDER_VERSION == 500
+#if BLENDER_VERSION < 501
 void MEM_freeN(void* ptr)
 {
     msblen_mem_free(ptr);

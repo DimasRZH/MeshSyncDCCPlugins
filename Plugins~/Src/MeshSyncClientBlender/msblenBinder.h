@@ -26,7 +26,7 @@ namespace blender
 	template<typename T> inline T rna_sdata(py::object p) { 
 #if BLENDER_VERSION >= 501
 		return reinterpret_cast<T>(p.attr("as_pointer")().cast<uintptr_t>());
-#elif BLENDER_VERSION >= 500
+#elif BLENDER_VERSION >= 405
 		return reinterpret_cast<T>(reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr->data);
 #else
 		return reinterpret_cast<T>( reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr.data );
@@ -35,7 +35,7 @@ namespace blender
 	template<typename T> inline void rna_sdata(py::object p, T& v) { 
 #if BLENDER_VERSION >= 501
 		v = reinterpret_cast<T>(p.attr("as_pointer")().cast<uintptr_t>());
-#elif BLENDER_VERSION >= 500
+#elif BLENDER_VERSION >= 405
 		v = reinterpret_cast<T>(reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr->data);
 #else
 		v = reinterpret_cast<T>( reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr.data );
@@ -121,7 +121,7 @@ namespace blender
         MSBLEN_BOILERPLATE2(BlenderMesh, Mesh)
         MSBLEN_COMPATIBLE(BlenderPyID)
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
         barray_range<int> indices();
         barray_range<int> face_offsets();
         barray_range<mu::float3> vertices();
@@ -140,7 +140,7 @@ namespace blender
 #if BLENDER_VERSION >= 304
         barray_range<int> material_indices();
 #endif
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
         const ::blender::float2* GetUV(int index) const;
 #else
         MLoopUV* GetUV(const int index) const;
@@ -159,7 +159,7 @@ namespace blender
 
 //----------------------------------------------------------------------------------------------------------------------
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     using BMTriangle = std::array<BMLoop*, 3>;
 #else
     using BMTriangle = BMLoop*[3];
@@ -178,7 +178,7 @@ namespace blender
     };
 
     uint32_t BEditMesh::GetNumUVs() const {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
         return msCustomData_number_of_layers(&m_ptr->bm->ldata, CD_PROP_FLOAT2);
 #else
         return msCustomData_number_of_layers(&m_ptr->bm->ldata, CD_MLOOPUV);

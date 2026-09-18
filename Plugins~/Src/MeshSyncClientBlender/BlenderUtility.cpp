@@ -23,7 +23,7 @@ void BlenderUtility::ApplyBMeshUVToMesh(const blender::BlenderMesh* bMesh, const
         SharedVector<mu::float2>& curUV = dest->m_uv[uvIndex];
         curUV.resize_discard(numIndices);
         for (size_t ii = 0; ii < numIndices; ++ii) {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
             curUV[ii] = { loopUV->x, loopUV->y };
 #else
             curUV[ii] = (mu::float2&)loopUV->uv;

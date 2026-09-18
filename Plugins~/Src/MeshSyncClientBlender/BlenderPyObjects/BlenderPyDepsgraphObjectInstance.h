@@ -1,6 +1,6 @@
 #pragma once
 
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
 #include <BKE_context.hh> //bContext
 #else
 #include <BKE_context.h> //bContext

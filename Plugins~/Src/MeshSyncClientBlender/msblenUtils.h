@@ -43,7 +43,7 @@ inline const mu::float3& get_instance_offset(const Collection *col) {
 }
 
 inline BMEditMesh* get_edit_mesh(Mesh *mesh) {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     // ponytail: MeshRuntime embeds Blender's toolset-specific STL layout; add an RNA
     // edit-mode adapter if live edit-mode mesh sync becomes required on Blender 5.
     return nullptr;
@@ -53,7 +53,7 @@ inline BMEditMesh* get_edit_mesh(Mesh *mesh) {
 }
 
 inline unsigned int get_session_id(const ID* id) {
-#if BLENDER_VERSION >= 500
+#if BLENDER_VERSION >= 405
     return id->session_uid;
 #else
     return id->session_uuid;
