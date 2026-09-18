@@ -203,7 +203,6 @@ private:
     ms::TextureManager m_texture_manager;
     ms::MaterialManager m_material_manager;
     ms::EntityManager m_entity_manager;
-    ms::AsyncSceneSender m_sender;
     ms::SceneCacheWriter m_cache_writer;
     ms::InstancesManager m_instances_manager;
 
@@ -228,6 +227,9 @@ private:
     std::map<std::string, AnimationRecord> m_anim_records;
     float m_anim_time = 0.0f;
     bool m_ignore_events = false;
+
+    // Must be destroyed first: its worker callbacks access the members above.
+    ms::AsyncSceneSender m_sender;
 };
 using msblenContextPtr = std::shared_ptr<msblenContext>;
 #define msblenGetContext() msblenContext::getInstance()

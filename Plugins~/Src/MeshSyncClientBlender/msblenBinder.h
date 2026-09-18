@@ -10,6 +10,10 @@ namespace blender
 {
     bool ready();
     void setup(py::object bpy_context);
+    int msCustomData_get_layer_index_n(const CustomData* data, int type, int n);
+    void* msCustomData_get_layer_n(const CustomData* data, int type, int n);
+    int msCustomData_number_of_layers(const CustomData* data, int type);
+    void* msCustomData_get_layer_named(const CustomData* data, int type, const char* name);
     const void* CustomData_get(const CustomData& data, int type);
     int CustomData_get_offset(const CustomData& data, int type);
     mu::float3 BM_loop_calc_face_normal(const BMLoop& l);
@@ -20,10 +24,22 @@ namespace blender
     struct ListHeader { ListHeader *next, *prev; };
 
 	template<typename T> inline T rna_sdata(py::object p) { 
+#if BLENDER_VERSION >= 501
+		return reinterpret_cast<T>(p.attr("as_pointer")().cast<uintptr_t>());
+#elif BLENDER_VERSION >= 405
+		return reinterpret_cast<T>(reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr->data);
+#else
 		return reinterpret_cast<T>( reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr.data );
+#endif
 	}
 	template<typename T> inline void rna_sdata(py::object p, T& v) { 
+#if BLENDER_VERSION >= 501
+		v = reinterpret_cast<T>(p.attr("as_pointer")().cast<uintptr_t>());
+#elif BLENDER_VERSION >= 405
+		v = reinterpret_cast<T>(reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr->data);
+#else
 		v = reinterpret_cast<T>( reinterpret_cast<BPy_StructRNA*>(p.ptr())->ptr.data );
+#endif
 	}
 	
 	template<typename T>
@@ -100,23 +116,36 @@ namespace blender
 
 //----------------------------------------------------------------------------------------------------------------------
 
-    class BMesh {
+    class BlenderMesh {
     public:
-        MSBLEN_BOILERPLATE(Mesh)
+        MSBLEN_BOILERPLATE2(BlenderMesh, Mesh)
         MSBLEN_COMPATIBLE(BlenderPyID)
 
+#if BLENDER_VERSION >= 405
+        barray_range<int> indices();
+        barray_range<int> face_offsets();
+        barray_range<mu::float3> vertices();
+        barray_range<MDeformVert> deform_vertices();
+        mu::float3 normal(int index) const;
+        int material_index(int index) const;
+        void set_material_index(int index, int value);
+#else
         barray_range<MLoop> indices();
         barray_range<MEdge> edges();
         barray_range<MPoly> polygons();
         barray_range<MVert> vertices();
+#endif
         barray_range<mu::float3> normals();
-        barray_range<MLoopUV> uv();
         barray_range<MLoopCol> colors();
 #if BLENDER_VERSION >= 304
         barray_range<int> material_indices();
 #endif
+#if BLENDER_VERSION >= 405
+        const ::blender::float2* GetUV(int index) const;
+#else
         MLoopUV* GetUV(const int index) const;
-        inline uint32_t GetNumUVs() const;
+#endif
+        uint32_t GetNumUVs() const;
 
         void calc_normals_split();
         void update();
@@ -128,12 +157,13 @@ namespace blender
         void add_normals(int count);
     };
 
-    uint32_t BMesh::GetNumUVs() const { return CustomData_number_of_layers(&m_ptr->ldata, CD_MLOOPUV); }
-
-
 //----------------------------------------------------------------------------------------------------------------------
 
+#if BLENDER_VERSION >= 405
+    using BMTriangle = std::array<BMLoop*, 3>;
+#else
     using BMTriangle = BMLoop*[3];
+#endif
     class BEditMesh
     {
     public:
@@ -145,10 +175,15 @@ namespace blender
         int uv_data_offset(int index) const;
         inline uint32_t GetNumUVs() const;
 
-        MLoopUV* GetUV(const int index) const;
     };
 
-    uint32_t BEditMesh::GetNumUVs() const { return CustomData_number_of_layers(&m_ptr->bm->ldata, CD_MLOOPUV); }
+    uint32_t BEditMesh::GetNumUVs() const {
+#if BLENDER_VERSION >= 405
+        return msCustomData_number_of_layers(&m_ptr->bm->ldata, CD_PROP_FLOAT2);
+#else
+        return msCustomData_number_of_layers(&m_ptr->bm->ldata, CD_MLOOPUV);
+#endif
+    }
 
     //----------------------------------------------------------------------------------------------------------------------
     

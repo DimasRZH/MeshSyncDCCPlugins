@@ -7,15 +7,16 @@ std::string msblenContextIntermediatePathProvider::append_id(std::string path, c
 
     path += "_" + std::string(data->name);
 
-    // If we already have an object with this name but a different session_uuid, append the session_uuid as well
+    // If we already have an object with this name but a different session ID, append it as well.
     auto it = mappedNames.find(data->name);
+    const auto session_id = msblenUtils::get_session_id(data);
 
     if (it == mappedNames.end()) {
-        mappedNames.insert(std::make_pair(data->name, data->session_uuid));
+        mappedNames.insert(std::make_pair(data->name, session_id));
     }
-    else if (it->second != data->session_uuid)
+    else if (it->second != session_id)
     {
-        path += "_" + std::to_string(data->session_uuid);
+        path += "_" + std::to_string(session_id);
     }
 
     return path;

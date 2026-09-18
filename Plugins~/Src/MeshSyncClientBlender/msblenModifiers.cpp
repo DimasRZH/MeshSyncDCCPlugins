@@ -23,7 +23,40 @@ void msblenModifiers::importProperties(std::vector<ms::PropertyInfo> props) {}
 
 std::mutex m_mutex;
 
-bNodeSocket* getSocketForProperty(IDProperty* property, bNodeTree* group) {
+#if BLENDER_VERSION >= 405
+using ModifierSocket = bNodeTreeInterfaceSocket;
+
+ModifierSocket* findSocketForProperty(IDProperty* property, bNodeTreeInterfacePanel& panel) {
+	for (int i = 0; i < panel.items_num; ++i) {
+		auto* item = panel.items_array[i];
+		if (item->item_type == NODE_INTERFACE_SOCKET) {
+			auto* socket = reinterpret_cast<ModifierSocket*>(item);
+			if ((socket->flag & NODE_INTERFACE_SOCKET_INPUT) &&
+				strcmp(socket->identifier, property->name) == 0)
+				return socket;
+		}
+		else if (auto* socket = findSocketForProperty(
+			property, *reinterpret_cast<bNodeTreeInterfacePanel*>(item))) {
+			return socket;
+		}
+	}
+	return nullptr;
+}
+
+ModifierSocket* getSocketForProperty(IDProperty* property, bNodeTree* group) {
+	return group ? findSocketForProperty(property, group->tree_interface.root_panel) : nullptr;
+}
+
+bool socketIsBoolean(const ModifierSocket* socket) {
+	return STREQ(socket->socket_type, "NodeSocketBool");
+}
+
+void* socketDefaultValue(ModifierSocket* socket) { return socket->socket_data; }
+const char* socketName(const ModifierSocket* socket) { return socket->name; }
+#else
+using ModifierSocket = bNodeSocket;
+
+ModifierSocket* getSocketForProperty(IDProperty* property, bNodeTree* group) {
 	for (bNodeSocket* socket : blender::list_range((bNodeSocket*)group->inputs.first)) {
 		if (strcmp(socket->identifier, property->name) == 0) {
 			return socket;
@@ -32,6 +65,11 @@ bNodeSocket* getSocketForProperty(IDProperty* property, bNodeTree* group) {
 
 	return nullptr;
 }
+
+bool socketIsBoolean(const ModifierSocket* socket) { return socket->type == SOCK_BOOLEAN; }
+void* socketDefaultValue(ModifierSocket* socket) { return socket->default_value; }
+const char* socketName(const ModifierSocket* socket) { return socket->name; }
+#endif
 
 bool doesPropertyUseAttribute(std::string propertyName, NodesModifierData* nodeModifier) {
 	auto attributeName = propertyName + "_use_attribute";
@@ -79,27 +117,27 @@ void addModifierProperties(ModifierData* modifier, const Object* obj, ms::Proper
 
 		switch (property->type) {
 		case IDP_INT: {
-			if (socket->type == SOCK_BOOLEAN) {
+			if (socketIsBoolean(socket)) {
 				propertyInfo->set(IDP_Int(property), 0, 1);
 			}
 			else {
-				auto defaultValue = (bNodeSocketValueInt*)socket->default_value;
+				auto defaultValue = (bNodeSocketValueInt*)socketDefaultValue(socket);
 				propertyInfo->set(IDP_Int(property), defaultValue->min, defaultValue->max);
 			}
 			break;
 		}
 		case IDP_FLOAT: {
-			auto defaultValue = (bNodeSocketValueFloat*)socket->default_value;
+			auto defaultValue = (bNodeSocketValueFloat*)socketDefaultValue(socket);
 			propertyInfo->set(IDP_Float(property), defaultValue->min, defaultValue->max);
 			break;
 		}
 		case IDP_DOUBLE: {
-			auto defaultValue = (bNodeSocketValueFloat*)socket->default_value;
+			auto defaultValue = (bNodeSocketValueFloat*)socketDefaultValue(socket);
 			propertyInfo->set((float)IDP_Double(property), defaultValue->min, defaultValue->max);
 			break;
 		}
 		case IDP_ARRAY: {
-			auto defaultValue = (bNodeSocketValueVector*)socket->default_value;
+			auto defaultValue = (bNodeSocketValueVector*)socketDefaultValue(socket);
 			switch (property->subtype) {
 			case IDP_INT: {
 				propertyInfo->set((int*)IDP_Array(property), defaultValue->min, defaultValue->max, property->len);
@@ -122,7 +160,7 @@ void addModifierProperties(ModifierData* modifier, const Object* obj, ms::Proper
 		}
 
 		propertyInfo->path = msblenUtils::get_path(obj);
-		propertyInfo->name = socket->name;
+		propertyInfo->name = socketName(socket);
 		propertyInfo->modifierName = modifier->name;
 		propertyInfo->propertyName = property->name;
 		propertyInfo->sourceType = ms::PropertyInfo::SourceType::GEO_NODES;
@@ -263,8 +301,8 @@ void setProperty(const Object* obj, IDProperty* property, ms::PropertyInfo& rece
 	switch (obj->type) {
 	case OB_MESH:
 	{
-		auto mesh = (BMesh*)obj->data;
-		BMesh(mesh).update();
+		auto mesh = (Mesh*)obj->data;
+		BlenderMesh(mesh).update();
 		break;
 	}
 	}

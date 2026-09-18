@@ -26,6 +26,12 @@ set(BLENDER_INCLUDE_DIRS
 
 file(GLOB_RECURSE sources *.cpp *.h *.c)
 add_library(${MESHSYNC_CLIENT_BLENDER}  SHARED ${sources})
+if(BLENDER_VERSION VERSION_GREATER_EQUAL "5.1.0")
+    target_compile_features(${MESHSYNC_CLIENT_BLENDER} PRIVATE cxx_std_20)
+    if(WIN32)
+        target_compile_options(${MESHSYNC_CLIENT_BLENDER} PRIVATE /utf-8)
+    endif()
+endif()
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${sources})
 
 add_dependencies(${MESHSYNC_CLIENT_BLENDER} MeshSyncClient)

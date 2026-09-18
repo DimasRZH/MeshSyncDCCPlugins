@@ -21,8 +21,12 @@ int BlenderPyScene::fps() const  { return m_ptr->r.frs_sec; }
 int BlenderPyScene::frame_start() const  { return GetInt(m_ptr, BlenderPyScene_frame_start); }
 int BlenderPyScene::frame_end() const { return GetInt(m_ptr, BlenderPyScene_frame_end); }
 int BlenderPyScene::GetCurrentFrame() const{ return GetInt(m_ptr, BlenderPyScene_frame_current); }
+float BlenderPyScene::GetCurrentSubframe() const { return m_ptr->r.subframe; }
 
-void BlenderPyScene::SetCurrentFrame(int frame, Depsgraph* depsgraph) {
+void BlenderPyScene::SetCurrentFrame(int frame, Depsgraph* depsgraph, float subframe) {
+#if BLENDER_VERSION >= 405
+    frame_set(frame, subframe);
+#else
     SetInt(m_ptr, BlenderPyScene_frame_current, frame);
 
     struct DepsGraphInChar {
@@ -45,6 +49,7 @@ void BlenderPyScene::SetCurrentFrame(int frame, Depsgraph* depsgraph) {
     charGraph->Buffer[ID_TYPE_UPDATED_OFFSET + INDEX_ID_SCE] = 1;
 
     BlenderPyContext::UpdateDepsgraph(depsgraph);
+#endif
 
 }
 

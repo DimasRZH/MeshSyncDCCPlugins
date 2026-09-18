@@ -56,11 +56,15 @@ This allows devs to immediately see how things will look in-game while modelling
 | Blender 3.2        | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Blender 3.3        | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Blender 3.4        | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Blender 4.5 LTS    | :white_check_mark: |                    |                    |
+| Blender 5.0        | :white_check_mark: |                    |                    |
+| Blender 5.1        | :white_check_mark: |                    |                    |
 
 Notes:
 * :white_check_mark: : Supported
 * :x: : Impossible to support (platform unsupported by the DCC, etc)
 * empty : May be supported in the future
+* Blender 4.5, 5.0 and 5.1 on Windows use [manual installation](Installation.md); MeshSync 0.17.3's automatic DCC detector does not list them yet.
 
 # DCC Plugin Installation
 

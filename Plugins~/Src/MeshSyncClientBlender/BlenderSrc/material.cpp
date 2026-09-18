@@ -10,6 +10,10 @@
 #undef rad2 //required before including "DNA_meta_types.h" 
 #include "DNA_meta_types.h" //MetaBall
 
+#if BLENDER_VERSION >= 501
+namespace blender {
+#endif
+
 #if BLENDER_VERSION < 302
 
 Material ***BKE_object_material_array_p(Object *ob)
@@ -98,10 +102,18 @@ Material ***BKE_object_material_array_p(Object *ob)
     MetaBall *mb = reinterpret_cast<MetaBall*>(ob->data);
     return &(mb->mat);
   }
+#if BLENDER_VERSION >= 405
+  if (ob->type == OB_GREASE_PENCIL) {
+    GreasePencil *grease_pencil = reinterpret_cast<GreasePencil*>(ob->data);
+    return &(grease_pencil->material_array);
+  }
+#else
   if (ob->type == OB_GPENCIL) {
     bGPdata *gpd = reinterpret_cast<bGPdata*>(ob->data);
     return &(gpd->mat);
   }
+#endif
+
   if (ob->type == OB_CURVES) {
     Curves *curves = reinterpret_cast<Curves*>(ob->data);
     return &(curves->mat);
@@ -131,10 +143,17 @@ short *BKE_object_material_len_p(Object *ob)
     MetaBall *mb = reinterpret_cast<MetaBall*>(ob->data);
     return &(mb->totcol);
   }
+#if BLENDER_VERSION >= 405
+  if (ob->type == OB_GREASE_PENCIL) {
+    GreasePencil *grease_pencil = reinterpret_cast<GreasePencil*>(ob->data);
+    return &(grease_pencil->material_array_num);
+  }
+#else
   if (ob->type == OB_GPENCIL) {
     bGPdata *gpd = reinterpret_cast<bGPdata*>(ob->data);
     return &(gpd->totcol);
   }
+#endif
   if (ob->type == OB_CURVES) {
     Curves *curves = reinterpret_cast<Curves*>(ob->data);
     return &(curves->totcol);
@@ -149,4 +168,8 @@ short *BKE_object_material_len_p(Object *ob)
   }
   return NULL;
 }
+#endif
+
+#if BLENDER_VERSION >= 501
+} // namespace blender
 #endif

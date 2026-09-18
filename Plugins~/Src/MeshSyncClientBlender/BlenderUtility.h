@@ -10,11 +10,11 @@ class Mesh;
 
 namespace blender{
 
-class BMesh;
+class BlenderMesh;
 
 class BlenderUtility {
 public:
-    static void ApplyBMeshUVToMesh(const blender::BMesh* bMesh, const size_t numIndices, ms::Mesh* dest);
+    static void ApplyBMeshUVToMesh(const blender::BlenderMesh* bMesh, const size_t numIndices, ms::Mesh* dest);
     static Material** GetMaterials(Object* obj);
     static short GetNumMaterials(Object* obj);
 };
